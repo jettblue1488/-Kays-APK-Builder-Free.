@@ -1,0 +1,28 @@
+name: Build Kay's Chat Forensics APK
+on:
+  workflow_dispatch:
+  push:
+    branches: [kays-chat-forensics]
+    paths: ['forensics/**', '.github/workflows/build-chat-forensics.yml']
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Build APK
+        working-directory: forensics
+        run: gradle --no-daemon :app:assembleDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Kays-Chat-Forensics-debug-apk
+          path: forensics/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
