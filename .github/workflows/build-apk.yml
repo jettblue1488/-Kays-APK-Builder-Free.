@@ -3,36 +3,60 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
+
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
-      contents: read
+      contents: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
-      - name: Check preinstalled Android SDK
-        run: |
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          test -n "$ANDROID_HOME"
-          test -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --version
-      - name: Install Android SDK packages
-        run: |
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-35' 'build-tools;35.0.0'
       - name: Install Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Compile debug APK
+      - name: Check Android SDK and install packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          test -n "$ANDROID_HOME"
+          test -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --version
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Build installable APK
         run: gradle --no-daemon :app:assembleDebug --stacktrace
-      - name: Upload installable APK
+      - name: Upload Actions artifact
         uses: actions/upload-artifact@v4
         with:
           name: KaysAPKBuilder-debug-apk
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+      - name: Prepare direct-download APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          apks=(app/build/outputs/apk/debug/*.apk)
+          test -f "${apks[0]}"
+          cp "${apks[0]}" Kays-APK-Builder-Free.apk
+      - name: Publish clickable direct download
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view android-apk >/dev/null 2>&1; then
+            gh release upload android-apk Kays-APK-Builder-Free.apk --clobber
+          else
+            gh release create android-apk Kays-APK-Builder-Free.apk \
+              --title "Kay's APK Builder Free - Android app" \
+              --notes "Tap the APK file to download it on Android, then install and open Kay's APK Builder. This free Android starter-project creator exports editable ZIP projects. Note that debug signing can change between GitHub Actions runs." \
+              --latest
+          fi
