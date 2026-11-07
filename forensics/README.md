@@ -4,6 +4,16 @@ Free offline Android forensic evidence app that bundles the **actual SecurityRon
 
 Original engine: https://github.com/SecurityRonin/chat4n6, MIT licensed. See `THIRD_PARTY_LICENSE.txt`.
 
+## New local scanning in v0.3.0
+
+Choose a platform from the dropdown and tap **SCAN SELECTED PLATFORM — PHOTOS & VIDEOS**. Request Android media permissions as needed. The phone searches only accessible photos/videos in Android MediaStore, including trashed media where its content provider permits; it uses the filenames and folders to make *best-effort platform attribution*. It does not decrypt or retrieve private data of other apps. Choose **Other** to see all accessible media.
+
+Tap **SCAN DEVICE PHONE CALL HISTORY** to request separate `READ_CALL_LOG` access and show the **device's regular phone call log**, not calls made inside WhatsApp, Signal or other apps. This permission may be restricted by your Android installation method.
+
+Scan findings show date, filename, available folder and whether Android marks an item as trashed. Tap a photo/video result to try viewing it. Tap **SAVE SCAN RESULTS AS CSV** to export findings on demand. Scan results exist in memory unless explicitly exported.
+
+**What scanning cannot do:** Automatically recover permanently deleted, overwritten, cloud-only, or sandboxed messages/photos/calls. For encrypted/private app data, supply lawfully acquired backups or extracted databases to chat4n6 via **ADD EVIDENCE FILE** and **RUN CHAT4N6 ANALYSIS**. Browsing other apps' private storage is not a normal Android app capability. Detection based on folder labels may be incomplete or mistaken.
+
 ## Capabilities
 
 - Import user-selected files without asking for storage or network permissions.

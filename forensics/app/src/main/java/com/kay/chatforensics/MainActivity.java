@@ -21,13 +21,17 @@ import java.util.zip.ZipOutputStream;
 import org.json.JSONObject;
 
 public class MainActivity extends Activity {
-    private static final int PICK_FILE = 10, SAVE_REPORT = 11;
+    private static final int PICK_FILE = 10, SAVE_REPORT = 11, SAVE_SCAN_CSV = 12;
+    private static final int REQUEST_MEDIA = 33, REQUEST_PHONE_LOG = 34;
     private static final String[] PLATFORMS = {"WhatsApp", "Signal", "Telegram", "Snapchat", "TikTok", "Facebook Messenger", "Instagram", "Other"};
     private Spinner platform;
     private TextView status;
     private LinearLayout entries;
     private WebView reportView;
     private File reportForExport;
+    private LinearLayout scanRows;
+    private final ArrayList<LocalScanner.Finding> lastScan = new ArrayList<>();
+    private String scanTitle = "No scan completed yet.";
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -53,7 +57,7 @@ public class MainActivity extends Activity {
         root.setOrientation(LinearLayout.VERTICAL);
         scroll.addView(root);
         root.addView(text("KAY'S CHAT FORENSICS", 25, 0xff73d9ff));
-        root.addView(text("OFFLINE • LOCAL EVIDENCE ANALYSIS • v0.2.2", 12, 0xffbfd4e8));
+        root.addView(text("OFFLINE • LOCAL EVIDENCE ANALYSIS • v0.3.0", 12, 0xffbfd4e8));
         root.addView(text("Import files you own or have permission to examine. The original imports stay in private storage with SHA-256 hashes.", 14, Color.WHITE));
         root.addView(text("CHOOSE A PLATFORM FOR YOUR IMPORT", 13, Color.WHITE));
         platform = new Spinner(this);
@@ -94,8 +98,28 @@ public class MainActivity extends Activity {
         export.setOnClickListener(v -> startExport());
         root.addView(export);
 
+        root.addView(text("ONE-TAP LOCAL SCANS", 19, Color.WHITE));
+        Button mediaScan = new Button(this);
+        mediaScan.setText("SCAN SELECTED PLATFORM — PHOTOS & VIDEOS");
+        mediaScan.setOnClickListener(v -> beginMediaScan());
+        root.addView(mediaScan);
+        Button calls = new Button(this);
+        calls.setText("SCAN DEVICE PHONE CALL HISTORY");
+        calls.setOnClickListener(v -> beginPhoneScan());
+        root.addView(calls);
+        Button csv = new Button(this);
+        csv.setText("SAVE SCAN RESULTS AS CSV");
+        csv.setOnClickListener(v -> exportScanCsv());
+        root.addView(csv);
+        root.addView(text("Scans only shared media made accessible by Android and your device's own phone call log after permission. Android trash entries may appear if the system makes them visible. Other apps' private chats, deleted photos, messages and in-app call logs cannot be scanned automatically without accessible forensic evidence. Use ADD EVIDENCE FILE for compatible exports and databases.", 13, 0xffffcb85));
+
         status = text("Ready. No internet or account needed.", 13, 0xff7cffa8);
         root.addView(status);
+        root.addView(text("SCAN RESULTS", 19, Color.WHITE));
+        scanRows = new LinearLayout(this);
+        scanRows.setOrientation(LinearLayout.VERTICAL);
+        root.addView(scanRows);
+        renderScanResults();
         root.addView(text("IMPORTS & HASHES", 19, Color.WHITE));
         entries = new LinearLayout(this);
         entries.setOrientation(LinearLayout.VERTICAL);
@@ -162,6 +186,14 @@ public class MainActivity extends Activity {
                     runOnUiThread(() -> status.setText("Report ZIP exported."));
                 } catch (Exception ex) { runOnUiThread(() -> status.setText("Export failed: " + ex.getMessage())); }
             }).start();
+            return;
+        }
+        if (request == SAVE_SCAN_CSV) {
+            try (OutputStream out = getContentResolver().openOutputStream(data.getData())) {
+                if (out == null) throw new IOException("Cannot save CSV to selected location");
+                out.write(LocalScanner.toCsv(lastScan).getBytes(StandardCharsets.UTF_8));
+                status.setText("Scan results exported to CSV.");
+            } catch (Exception ex) { status.setText("CSV export failed: " + ex.getMessage()); }
             return;
         }
         if (request != PICK_FILE) return;
@@ -400,6 +432,131 @@ public class MainActivity extends Activity {
         } catch (IOException ex) {
             Toast.makeText(this, "Could not read bundled license: " + ex.getMessage(), Toast.LENGTH_LONG).show();
         }
+    }
+
+
+    private void beginMediaScan() {
+        if (android.os.Build.VERSION.SDK_INT >= 33) {
+            boolean images=checkSelfPermission(android.Manifest.permission.READ_MEDIA_IMAGES)==android.content.pm.PackageManager.PERMISSION_GRANTED;
+            boolean videos=checkSelfPermission(android.Manifest.permission.READ_MEDIA_VIDEO)==android.content.pm.PackageManager.PERMISSION_GRANTED;
+            boolean selected=android.os.Build.VERSION.SDK_INT>=34 &&
+                    checkSelfPermission(android.Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED)==android.content.pm.PackageManager.PERMISSION_GRANTED;
+            if (!images && !videos && !selected) {
+                if (android.os.Build.VERSION.SDK_INT >= 34)
+                    requestPermissions(new String[] {android.Manifest.permission.READ_MEDIA_IMAGES,
+                            android.Manifest.permission.READ_MEDIA_VIDEO,
+                            android.Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED},REQUEST_MEDIA);
+                else requestPermissions(new String[]{android.Manifest.permission.READ_MEDIA_IMAGES,
+                        android.Manifest.permission.READ_MEDIA_VIDEO},REQUEST_MEDIA);
+                return;
+            }
+        } else if (checkSelfPermission(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+                != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{android.Manifest.permission.READ_EXTERNAL_STORAGE}, REQUEST_MEDIA);
+            return;
+        }
+        runMediaScan();
+    }
+
+    private void beginPhoneScan() {
+        new AlertDialog.Builder(this)
+            .setTitle("Read device phone call history?")
+            .setMessage("This scans your phone's regular call log, not calls inside WhatsApp, Signal, or other apps. Results stay on this device unless you export them.")
+            .setPositiveButton("Scan phone calls", (dialog, which) -> {
+                if (checkSelfPermission(android.Manifest.permission.READ_CALL_LOG)
+                        != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                    requestPermissions(new String[]{android.Manifest.permission.READ_CALL_LOG}, REQUEST_PHONE_LOG);
+                } else runPhoneScan();
+            }).setNegativeButton("Cancel",null).show();
+    }
+
+    @Override public void onRequestPermissionsResult(int request, String[] permissions, int[] grants) {
+        super.onRequestPermissionsResult(request,permissions,grants);
+        if (request==REQUEST_MEDIA) {
+            boolean granted=false;
+            for(int g:grants) if(g==android.content.pm.PackageManager.PERMISSION_GRANTED) granted=true;
+            if(granted)runMediaScan();
+            else status.setText("Media access denied. You can allow access in Android Settings > Apps > Kays Forensics > Permissions.");
+        } else if (request==REQUEST_PHONE_LOG) {
+            if(grants.length>0 && grants[0]==android.content.pm.PackageManager.PERMISSION_GRANTED)runPhoneScan();
+            else status.setText("Phone call log permission denied or restricted by Android.");
+        }
+    }
+
+    private void runMediaScan() {
+        String chosen = PLATFORMS[platform.getSelectedItemPosition()];
+        status.setText("Scanning shared photos and videos for "+chosen+"...");
+        new Thread(() -> {
+            try {
+                List<LocalScanner.Finding> found=LocalScanner.media(this,chosen,250);
+                runOnUiThread(() -> {
+                    lastScan.clear();
+                    lastScan.addAll(found);
+                    scanTitle="Media scan: "+chosen+" — "+found.size()+" accessible items (limit 250)";
+                    status.setText(found.isEmpty()?"No matching accessible shared-media files found. This does not mean deleted items do not exist.":scanTitle);
+                    renderScanResults();
+                });
+            } catch(Exception ex) {
+                runOnUiThread(() -> status.setText("Media scan unavailable: "+ex.getMessage()));
+            }
+        }).start();
+    }
+
+    private void runPhoneScan() {
+        status.setText("Reading device phone call history...");
+        new Thread(() -> {
+            try {
+                List<LocalScanner.Finding> found=LocalScanner.phoneCalls(this,250);
+                runOnUiThread(() -> {
+                    lastScan.clear();
+                    lastScan.addAll(found);
+                    scanTitle="Device phone call history: "+found.size()+" entries (limit 250)";
+                    status.setText(scanTitle);
+                    renderScanResults();
+                });
+            } catch(Exception ex) {
+                runOnUiThread(() -> status.setText("Call log unavailable: "+ex.getMessage()));
+            }
+        }).start();
+    }
+
+    private void renderScanResults() {
+        if (scanRows==null) return;
+        scanRows.removeAllViews();
+        scanRows.addView(text(scanTitle,13,0xffbfd4e8));
+        int displayed=0;
+        for(LocalScanner.Finding f:lastScan) {
+            if(displayed++>=75)break;
+            String label=f.kind+": "+f.title+"\n"+f.when+"\n"+f.detail;
+            TextView entry=text(label,13,f.inTrash?0xffffca82:Color.WHITE);
+            entry.setTextIsSelectable(true);
+            if(f.uri!=null && !f.uri.isEmpty()) {
+                entry.setOnClickListener(v -> {
+                    try {
+                        Intent i=new Intent(Intent.ACTION_VIEW);
+                        i.setDataAndType(Uri.parse(f.uri),f.mime);
+                        i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                        startActivity(i);
+                    } catch(Exception ex) {
+                        Toast.makeText(this,"Cannot open this media item; it may require restoration in your Gallery.",Toast.LENGTH_LONG).show();
+                    }
+                });
+            }
+            scanRows.addView(entry);
+            View line=new View(this);
+            line.setBackgroundColor(0xff35495c);
+            scanRows.addView(line,new LinearLayout.LayoutParams(-1,1));
+        }
+        if(lastScan.size()>75)scanRows.addView(text("Showing 75 items. Save the CSV to see all scanned results.",12,0xffbfd4e8));
+    }
+
+    private void exportScanCsv() {
+        if(lastScan.isEmpty()) { status.setText("No results to export. Run a scan first."); return; }
+        Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT);
+        i.addCategory(Intent.CATEGORY_OPENABLE);
+        i.setType("text/csv");
+        i.putExtra(Intent.EXTRA_TITLE,"Kays-Forensics-local-scan.csv");
+        startActivityForResult(i,SAVE_SCAN_CSV);
     }
 
     @Override public void onBackPressed() {
