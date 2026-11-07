@@ -21,7 +21,7 @@ import java.util.zip.ZipOutputStream;
 import org.json.JSONObject;
 
 public class MainActivity extends Activity {
-    private static final int PICK_FILE = 10, SAVE_REPORT = 11, SAVE_SCAN_CSV = 12;
+    private static final int PICK_FILE = 10, SAVE_REPORT = 11, SAVE_SCAN_CSV = 12, PICK_ARCHIVE = 13, SAVE_EXTRACTION_MANIFEST = 14;
     private static final int REQUEST_MEDIA = 33, REQUEST_PHONE_LOG = 34;
     private static final String[] PLATFORMS = {"WhatsApp", "Signal", "Telegram", "Snapchat", "TikTok", "Facebook Messenger", "Instagram", "Other"};
     private Spinner platform;
@@ -29,6 +29,7 @@ public class MainActivity extends Activity {
     private LinearLayout entries;
     private WebView reportView;
     private File reportForExport;
+    private File manifestForExport;
     private LinearLayout scanRows;
     private final ArrayList<LocalScanner.Finding> lastScan = new ArrayList<>();
     private String scanTitle = "No scan completed yet.";
@@ -57,7 +58,7 @@ public class MainActivity extends Activity {
         root.setOrientation(LinearLayout.VERTICAL);
         scroll.addView(root);
         root.addView(text("KAY'S CHAT FORENSICS", 25, 0xff73d9ff));
-        root.addView(text("OFFLINE • LOCAL EVIDENCE ANALYSIS • v0.3.1", 12, 0xffbfd4e8));
+        root.addView(text("OFFLINE • OFFLINE EXTRACTIONS & SCANS • v0.4.0", 12, 0xffbfd4e8));
         root.addView(text("Import files you own or have permission to examine. The original imports stay in private storage with SHA-256 hashes.", 14, Color.WHITE));
         root.addView(text("CHOOSE A PLATFORM FOR YOUR IMPORT", 13, Color.WHITE));
         platform = new Spinner(this);
@@ -72,6 +73,20 @@ public class MainActivity extends Activity {
             startActivityForResult(i, PICK_FILE);
         });
         root.addView(add);
+
+        Button extract = new Button(this);
+        extract.setText("FORENSIC EXTRACTION — SELECT ZIP BACKUP");
+        extract.setOnClickListener(v -> {
+            Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+            i.addCategory(Intent.CATEGORY_OPENABLE);
+            i.setType("application/zip");
+            startActivityForResult(i, PICK_ARCHIVE);
+        });
+        root.addView(extract);
+        Button extractionReport = new Button(this);
+        extractionReport.setText("EXPORT LATEST EXTRACTION MANIFEST");
+        extractionReport.setOnClickListener(v -> exportExtractionManifest());
+        root.addView(extractionReport);
 
         Button analyze = new Button(this);
         analyze.setText("RUN CHAT4N6 ANALYSIS");
@@ -124,7 +139,7 @@ public class MainActivity extends Activity {
         entries = new LinearLayout(this);
         entries.setOrientation(LinearLayout.VERTICAL);
         root.addView(entries);
-        root.addView(text("Supported chat4n6 database inputs: WhatsApp msgstore.db / wa.db / crypt14-15 with an authorized key, plaintext Signal signal.sqlite, and Telegram cache.db or cache4.db. Import related WAL and journal files separately. Snapchat, TikTok, Facebook and Instagram exports are kept and searchable as text where possible; they are not handled by the chat4n6 recovery engine.", 13, 0xffffcb85));
+        root.addView(text("ZIP backup extraction: choose an exported archive to preserve the original SHA-256 and extract supported databases, search-ready account exports and media. Supported chat4n6 database inputs: WhatsApp msgstore.db / wa.db / crypt14-15 with an authorized key, plaintext Signal signal.sqlite, and Telegram cache.db or cache4.db. Import related WAL and journal files separately. Snapchat, TikTok, Facebook and Instagram exports are kept and searchable as text where possible; they are not handled by the chat4n6 recovery engine.", 13, 0xffffcb85));
         setContentView(scroll);
         refresh();
     }
@@ -194,6 +209,21 @@ public class MainActivity extends Activity {
                 out.write(LocalScanner.toCsv(lastScan).getBytes(StandardCharsets.UTF_8));
                 status.setText("Scan results exported to CSV.");
             } catch (Exception ex) { status.setText("CSV export failed: " + ex.getMessage()); }
+            return;
+        }
+        if(request == SAVE_EXTRACTION_MANIFEST) {
+            if(manifestForExport == null) return;
+            try(InputStream in=new FileInputStream(manifestForExport);
+                OutputStream out=getContentResolver().openOutputStream(data.getData())) {
+                if(out == null)throw new IOException("Cannot open export destination");
+                byte[] buf=new byte[32768];int n;
+                while((n=in.read(buf))!=-1)out.write(buf,0,n);
+                status.setText("Extraction manifest exported.");
+            } catch(Exception ex) {status.setText("Manifest export failed: "+ex.getMessage());}
+            return;
+        }
+        if(request == PICK_ARCHIVE) {
+            importArchive(data.getData(), PLATFORMS[platform.getSelectedItemPosition()]);
             return;
         }
         if (request != PICK_FILE) return;
@@ -434,6 +464,76 @@ public class MainActivity extends Activity {
         }
     }
 
+
+
+    private void importArchive(Uri uri, String chosen) {
+        status.setText("Saving archive and indexing forensic evidence...");
+        new Thread(() -> {
+            File archive=null;
+            try {
+                String originalName="forensic-extraction.zip";
+                try(Cursor c=getContentResolver().query(uri,new String[]{OpenableColumns.DISPLAY_NAME},null,null,null)) {
+                    if(c!=null && c.moveToFirst() && !c.isNull(0))originalName=c.getString(0);
+                }
+                originalName=safeFileName(originalName);
+                if(!ForensicArchiveImporter.looksLikeArchive(originalName))
+                    throw new IOException("Select a .zip backup or forensic extraction");
+                String id=UUID.randomUUID().toString();
+                archive=new File(evidenceDir(),id+".bin");
+                MessageDigest hash=MessageDigest.getInstance("SHA-256");
+                long bytes=0;
+                try(InputStream in=getContentResolver().openInputStream(uri);
+                    OutputStream out=new FileOutputStream(archive)) {
+                    if(in==null)throw new IOException("Cannot open ZIP archive");
+                    byte[] buf=new byte[32768];int n;
+                    while((n=in.read(buf))!=-1) {
+                        bytes+=n;
+                        if(bytes>512L*1024*1024) throw new IOException("Archive too large (512 MB maximum)");
+                        hash.update(buf,0,n);out.write(buf,0,n);
+                    }
+                }
+                StringBuilder sha=new StringBuilder();
+                for(byte v:hash.digest()) sha.append(String.format(Locale.US,"%02x",v & 255));
+                String timestamp=now();
+                JSONObject archiveRecord=new JSONObject();
+                archiveRecord.put("id",id);archiveRecord.put("name",originalName);
+                archiveRecord.put("platform",chosen);archiveRecord.put("bytes",bytes);
+                archiveRecord.put("timestamp",timestamp);archiveRecord.put("sha256",sha.toString());
+                archiveRecord.put("classification","Original imported ZIP, preserved unchanged");
+                try(OutputStream out=new FileOutputStream(new File(evidenceDir(),id+".json"))) {
+                    out.write(archiveRecord.toString(2).getBytes(StandardCharsets.UTF_8));
+                }
+                ForensicArchiveImporter.Result result=ForensicArchiveImporter.extract(archive,
+                    evidenceDir(),inputDir(),reportsDir(),chosen,id,timestamp,originalName,sha.toString());
+                getPreferences(0).edit().putString("latest_extraction",result.manifest.getAbsolutePath()).apply();
+                String detail=result.description();
+                boolean ready=result.engineFiles>0;
+                runOnUiThread(() -> {
+                    refresh();
+                    status.setText(detail+(ready?" Starting chat4n6 analysis...":" No supported chat database found; searchable files remain saved."));
+                    if(ready)analyze();
+                });
+            } catch(Exception ex) {
+                if(archive!=null && !new File(evidenceDir(),
+                    archive.getName().replace(".bin",".json")).isFile())archive.delete();
+                String message=ex.getMessage();
+                runOnUiThread(() -> status.setText("Extraction failed: "+message+
+                    ". The original ZIP remains saved if it was fully imported."));
+            }
+        }).start();
+    }
+
+    private void exportExtractionManifest() {
+        String path=getPreferences(0).getString("latest_extraction","");
+        File f=new File(path);
+        if(!f.isFile()) {status.setText("Import a ZIP extraction first.");return;}
+        manifestForExport=f;
+        Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT);
+        i.addCategory(Intent.CATEGORY_OPENABLE);
+        i.setType("application/json");
+        i.putExtra(Intent.EXTRA_TITLE,"Kays-Forensics-extraction-manifest.json");
+        startActivityForResult(i,SAVE_EXTRACTION_MANIFEST);
+    }
 
     private void beginMediaScan() {
         if (android.os.Build.VERSION.SDK_INT >= 33) {

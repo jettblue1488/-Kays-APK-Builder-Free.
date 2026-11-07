@@ -4,6 +4,20 @@ Free offline Android forensic evidence app that bundles the **actual SecurityRon
 
 Original engine: https://github.com/SecurityRonin/chat4n6, MIT licensed. See `THIRD_PARTY_LICENSE.txt`.
 
+## Forensic extraction import — v0.4.0
+
+Select one of the supported platforms and tap **FORENSIC EXTRACTION — SELECT ZIP BACKUP**. Choose a ZIP archive exported from your own or authorized device, or downloaded account export. The app copies and preserves the full original ZIP unchanged in private storage, records SHA-256 and timestamp, safely enumerates its contents, and extracts:
+- WhatsApp `msgstore.db`, `wa.db`, `key`, `.crypt14/15`, and supported WAL/journal sidecars;
+- Plaintext Signal `signal.sqlite` or `signal.db` and sidecars;
+- Telegram `cache.db` / `cache4.db` and sidecars;
+- Account export text files (JSON, TXT, CSV, HTML, XML, LOG) and selected media formats from Snapchat, TikTok, Facebook Messenger, Instagram, and other ZIP archives.
+
+Individual imported files receive metadata with per-file SHA-256, original archive SHA-256, source path and timestamp. The app writes a JSON forensic extraction manifest and offers **EXPORT LATEST EXTRACTION MANIFEST**. If the archive contains compatible database evidence, the app automatically launches chat4n6 local analysis.
+
+Archive safety: ZIPs limited to 512 MB, max 5000 entries and 1 GB of decompressed bytes, max 250 preserved entries / 500 MB extracted. Archive path traversal is rejected and archive-provided paths are never written directly to the filesystem. Encrypted ZIPs are not supported. Exported media files are preserved, not automatically restored into another app. A saved ZIP is an original evidence copy, while extracted files are working copies. The working input directory is shared across imports, so analyze unrelated cases separately if provenance separation matters.
+
+**Limitations:** This does not extract hidden/private chat databases from installed apps, bypass encryption, or guarantee recovery of deleted content. Actual message recovery is still performed by the upstream chat4n6 Rust engine on compatible pre-acquired database files.
+
 ## One-tap scanner v0.3.1 installation
 
 Version 0.3.1 has a separate experimental Android application ID, `com.kay.forensics.autoscan`, to prevent certificate mismatch with previously installed experimental APKs. It installs alongside versions 0.2.x instead of replacing them. Original evidence in old versions is not migrated or deleted. Future builds still need a securely stored persistent signing key for normal upgrades; GitHub's temporary debug keys are not reusable across runs.
