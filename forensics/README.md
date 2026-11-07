@@ -4,7 +4,11 @@ Free offline Android forensic evidence app that bundles the **actual SecurityRon
 
 Original engine: https://github.com/SecurityRonin/chat4n6, MIT licensed. See `THIRD_PARTY_LICENSE.txt`.
 
-## New local scanning in v0.3.0
+## One-tap scanner v0.3.1 installation
+
+Version 0.3.1 has a separate experimental Android application ID, `com.kay.forensics.autoscan`, to prevent certificate mismatch with previously installed experimental APKs. It installs alongside versions 0.2.x instead of replacing them. Original evidence in old versions is not migrated or deleted. Future builds still need a securely stored persistent signing key for normal upgrades; GitHub's temporary debug keys are not reusable across runs.
+
+## New local scanning in v0.3.1
 
 Choose a platform from the dropdown and tap **SCAN SELECTED PLATFORM — PHOTOS & VIDEOS**. Request Android media permissions as needed. The phone searches only accessible photos/videos in Android MediaStore, including trashed media where its content provider permits; it uses the filenames and folders to make *best-effort platform attribution*. It does not decrypt or retrieve private data of other apps. Choose **Other** to see all accessible media.
 
