@@ -1,4 +1,4 @@
-name: Build Kay's Chat Forensics APK
+name: Build Kays Forensics Android APK
 on:
   workflow_dispatch:
   push:
@@ -15,14 +15,35 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+      - name: Set up Android NDK for Rust
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'ndk;27.2.12479018'
+          rustup target add aarch64-linux-android
+      - name: Build upstream chat4n6 for arm64 Android
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --depth 1 https://github.com/SecurityRonin/chat4n6.git /tmp/chat4n6
+          NDK="$ANDROID_HOME/ndk/27.2.12479018"
+          TOOLCHAIN="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$TOOLCHAIN/aarch64-linux-android26-clang"
+          export CC_aarch64_linux_android="$TOOLCHAIN/aarch64-linux-android26-clang"
+          export AR_aarch64_linux_android="$TOOLCHAIN/llvm-ar"
+          export RUSTFLAGS="-C link-arg=-Wl,-z,max-page-size=16384"
+          cd /tmp/chat4n6
+          cargo build --release --locked --target aarch64-linux-android -p chat4n6 --bin chat4n6
+          mkdir -p "$GITHUB_WORKSPACE/forensics/app/src/main/jniLibs/arm64-v8a"
+          cp target/aarch64-linux-android/release/chat4n6 "$GITHUB_WORKSPACE/forensics/app/src/main/jniLibs/arm64-v8a/libchat4n6.so"
+          file "$GITHUB_WORKSPACE/forensics/app/src/main/jniLibs/arm64-v8a/libchat4n6.so"
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Build APK
+      - name: Build Android APK
         working-directory: forensics
         run: gradle --no-daemon :app:assembleDebug
-      - uses: actions/upload-artifact@v4
+      - name: Upload installable APK
+        uses: actions/upload-artifact@v4
         with:
-          name: Kays-Chat-Forensics-debug-apk
+          name: Kays-Forensics-Android-APK
           path: forensics/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
