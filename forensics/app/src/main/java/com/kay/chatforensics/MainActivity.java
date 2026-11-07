@@ -53,7 +53,7 @@ public class MainActivity extends Activity {
         root.setOrientation(LinearLayout.VERTICAL);
         scroll.addView(root);
         root.addView(text("KAY'S CHAT FORENSICS", 25, 0xff73d9ff));
-        root.addView(text("OFFLINE • LOCAL EVIDENCE ANALYSIS • v0.2.1", 12, 0xffbfd4e8));
+        root.addView(text("OFFLINE • LOCAL EVIDENCE ANALYSIS • v0.2.2", 12, 0xffbfd4e8));
         root.addView(text("Import files you own or have permission to examine. The original imports stay in private storage with SHA-256 hashes.", 14, Color.WHITE));
         root.addView(text("CHOOSE A PLATFORM FOR YOUR IMPORT", 13, Color.WHITE));
         platform = new Spinner(this);

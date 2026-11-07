@@ -51,6 +51,16 @@ jobs:
           grep -Fq 'Copyright (c) 2026 SecurityRonin' forensics/THIRD_PARTY_LICENSE.txt
           grep -Fq 'Permission is hereby granted, free of charge' forensics/THIRD_PARTY_LICENSE.txt
           cp forensics/THIRD_PARTY_LICENSE.txt forensics/app/build/outputs/apk/debug/THIRD_PARTY_LICENSE.txt
+      - name: Verify installable APK signature and Android package ID
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="$(find forensics/app/build/outputs/apk/debug -maxdepth 1 -name '*.apk' -print -quit)"
+          test -n "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | head -n 8
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep -Fq "package: name='com.kay.forensics.standalone'"
+          unzip -t "$APK" | tail -n 1
       - name: Upload installable APK
         uses: actions/upload-artifact@v4
         with:

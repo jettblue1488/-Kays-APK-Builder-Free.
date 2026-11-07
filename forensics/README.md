@@ -17,6 +17,12 @@ Original engine: https://github.com/SecurityRonin/chat4n6, MIT licensed. See `TH
 
 Open GitHub Actions > `Build Kays Forensics Android APK` on branch `kays-chat-forensics`. The workflow downloads and builds the upstream Rust engine with the Android NDK, bundles it into the app and uploads the `Kays-Forensics-Android-APK` artifact. Extract the ZIP and install the APK. Rust build adds significant build time compared with the Java-only prototype.
 
+## Installation repair (v0.2.2)
+
+Version 0.2.2 uses a **new Android application ID**, `com.kay.forensics.standalone`. The earlier experimental APKs were individually signed with ephemeral GitHub runner debug certificates, so updates to an already installed older version can fail with `App not installed` because the signing certificates differ. With this new ID, the new version installs separately without removing the earlier app or its evidence. Do **not** uninstall an earlier app before exporting its evidence. If this build still fails to install, record the precise error (ADB `INSTALL_FAILED_*` if available) and check Android CPU architecture and installation source permissions.
+
+Important for **future updates**: GitHub Actions uses a different temporary debug signing key for each run. APKs cannot reliably replace an installed version until a **persistent, securely stored signing key** is configured with GitHub Actions Secrets. Never publicly commit a production or stable private signing key.
+
 ## Limitations
 
 - **Android arm64 only** (Pixel 8/9 and most newer devices). Not a universal APK for older 32-bit Android phones.
