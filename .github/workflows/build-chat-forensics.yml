@@ -41,9 +41,19 @@ jobs:
       - name: Build Android APK
         working-directory: forensics
         run: gradle --no-daemon :app:assembleDebug
+      - name: Verify copyright and full MIT license are in APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="$(find forensics/app/build/outputs/apk/debug -maxdepth 1 -name '*.apk' -print -quit)"
+          test -n "$APK"
+          unzip -p "$APK" assets/chat4n6-LICENSE.txt | cmp - forensics/THIRD_PARTY_LICENSE.txt
+          grep -Fq 'Copyright (c) 2026 SecurityRonin' forensics/THIRD_PARTY_LICENSE.txt
+          grep -Fq 'Permission is hereby granted, free of charge' forensics/THIRD_PARTY_LICENSE.txt
+          cp forensics/THIRD_PARTY_LICENSE.txt forensics/app/build/outputs/apk/debug/THIRD_PARTY_LICENSE.txt
       - name: Upload installable APK
         uses: actions/upload-artifact@v4
         with:
           name: Kays-Forensics-Android-APK
-          path: forensics/app/build/outputs/apk/debug/*.apk
+          path: forensics/app/build/outputs/apk/debug/*
           if-no-files-found: error

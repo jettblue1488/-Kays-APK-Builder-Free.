@@ -26,6 +26,12 @@ Open GitHub Actions > `Build Kays Forensics Android APK` on branch `kays-chat-fo
 - Imported .json/.csv/.html files are searchable by lines up to 5MB each and up to 100 matches. Larger text exports remain safely stored but are not keyword-indexed.
 - chat4n6 produces investigatory findings with uncertainty; recovered messages should be independently validated.
 
+## Third-party licenses and attribution
+
+The APK includes SecurityRonin/chat4n6 under the MIT License. The **original copyright notice and full unmodified MIT License text** are packaged at `assets/chat4n6-LICENSE.txt` and can be viewed from the app's **THIRD-PARTY LICENSE & COPYRIGHT** button. The GitHub Actions downloadable artifact contains `THIRD_PARTY_LICENSE.txt` alongside the APK. The workflow verifies the embedded license matches the file shipped in the artifact.
+
+The canonical upstream copyright and license are in `forensics/THIRD_PARTY_LICENSE.txt`, mirrored from https://github.com/SecurityRonin/chat4n6/blob/main/LICENSE.
+
 ## Security/privacy
 
 No internet permission, automatic scraping, or hidden scanning. User imports remain on-device in private app storage; Android automatic backup is disabled. Reports can be exported only through an explicit action. Uninstalling the app removes stored case files and reports unless separately exported.

@@ -53,7 +53,7 @@ public class MainActivity extends Activity {
         root.setOrientation(LinearLayout.VERTICAL);
         scroll.addView(root);
         root.addView(text("KAY'S CHAT FORENSICS", 25, 0xff73d9ff));
-        root.addView(text("OFFLINE • LOCAL EVIDENCE ANALYSIS • v0.2", 12, 0xffbfd4e8));
+        root.addView(text("OFFLINE • LOCAL EVIDENCE ANALYSIS • v0.2.1", 12, 0xffbfd4e8));
         root.addView(text("Import files you own or have permission to examine. The original imports stay in private storage with SHA-256 hashes.", 14, Color.WHITE));
         root.addView(text("CHOOSE A PLATFORM FOR YOUR IMPORT", 13, Color.WHITE));
         platform = new Spinner(this);
@@ -78,6 +78,11 @@ public class MainActivity extends Activity {
         view.setText("OPEN LATEST REPORT");
         view.setOnClickListener(v -> openLatestReport());
         root.addView(view);
+
+        Button legal = new Button(this);
+        legal.setText("THIRD-PARTY LICENSE & COPYRIGHT");
+        legal.setOnClickListener(v -> showThirdPartyLicense());
+        root.addView(legal);
 
         Button search = new Button(this);
         search.setText("SEARCH TEXT EXPORTS");
@@ -373,6 +378,28 @@ public class MainActivity extends Activity {
             scroller.addView(result);
             new AlertDialog.Builder(this).setTitle("Text export matches").setView(scroller).setPositiveButton("Close", null).show();
         });
+    }
+
+
+    private void showThirdPartyLicense() {
+        try (InputStream in = getAssets().open("chat4n6-LICENSE.txt");
+             ByteArrayOutputStream bytes = new ByteArrayOutputStream()) {
+            byte[] buffer = new byte[4096];
+            int n;
+            while ((n = in.read(buffer)) != -1) bytes.write(buffer, 0, n);
+            TextView notice = text(new String(bytes.toByteArray(), StandardCharsets.UTF_8), 14, Color.BLACK);
+            notice.setPadding(24, 24, 24, 24);
+            notice.setTextIsSelectable(true);
+            ScrollView scroller = new ScrollView(this);
+            scroller.addView(notice);
+            new AlertDialog.Builder(this)
+                .setTitle("chat4n6 — MIT License & Copyright")
+                .setView(scroller)
+                .setPositiveButton("Close", null)
+                .show();
+        } catch (IOException ex) {
+            Toast.makeText(this, "Could not read bundled license: " + ex.getMessage(), Toast.LENGTH_LONG).show();
+        }
     }
 
     @Override public void onBackPressed() {
